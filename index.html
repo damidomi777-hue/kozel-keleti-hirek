@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Közel-keleti hírek</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 24px 16px;
+      background: #0f1115;
+      color: #e8e8e8;
+      line-height: 1.45;
+    }
+    h1 { font-size: 1.5rem; margin: 0 0 4px; font-weight: 600; }
+    .sub { color: #888; font-size: 0.9rem; margin-bottom: 28px; }
+    .card {
+      background: #171a21;
+      border: 1px solid #2a2f3a;
+      border-radius: 10px;
+      padding: 16px 18px;
+      margin-bottom: 12px;
+    }
+    .card a {
+      color: #7ab8ff;
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 1.05rem;
+      display: block;
+      margin-bottom: 8px;
+    }
+    .card a:hover { text-decoration: underline; }
+    .meta {
+      font-size: 0.82rem;
+      color: #9aa0aa;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .source {
+      background: #243044;
+      color: #c5d4e8;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.78rem;
+    }
+    #news.loading, #news.error { text-align: center; color: #888; padding: 60px 20px; }
+  </style>
+</head>
+<body>
+  <h1>Közel-keleti hírek</h1>
+  <div class="sub">Frissül a Google Sheets-ből</div>
+  <div id="news" class="loading">Betöltés…</div>
+
+  <script>
+    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7_ACPifmqtX7GZW0oosyimN8Sm0aHcB3AohhvI5uLil9QdVv4OZGegkJajoKzjLLWIwAYKh0hSs7x/pub?gid=1460100958&single=true&output=csv';
+
+    function parseCSV(text) {
+      const rows = [];
+      let row = [], cell = '', inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (c === '"') {
+          if (inQuotes && text[i + 1] === '"') { cell += '"'; i++; }
+          else inQuotes = !inQuotes;
+        } else if (c === ',' && !inQuotes) {
+          row.push(cell); cell = '';
+        } else if ((c === '\n' || c === '\r') && !inQuotes) {
+          if (c === '\r' && text[i + 1] === '\n') i++;
+          if (cell || row.length) { row.push(cell); rows.push(row); row = []; cell = ''; }
+        } else {
+          cell += c;
+        }
+      }
+      if (cell || row.length) { row.push(cell); rows.push(row); }
+      return rows;
+    }
+
+    async function load() {
+      const el = document.getElementById('news');
+      try {
+        const res = await fetch(CSV_URL);
+        if (!res.ok) throw new Error(res.status);
+        const text = await res.text();
+        const rows = parseCSV(text).slice(1);
+
+        const items = rows
+          .map(r => ({
+            date: (r[0] || '').trim(),
+            source: (r[1] || '').trim(),
+            title: (r[2] || '').replace(/^"|"$/g, '').trim(),
+            link: (r[3] || '').trim()
+          }))
+          .filter(i => i.title && i.link);
+
+        items.sort((a, b) => b.date.localeCompare(a.date));
+
+        if (!items.length) throw new Error('üres');
+
+        el.innerHTML = items.map(i => `
+          <div class="card">
+            <a href="${i.link}" target="_blank" rel="noopener noreferrer">${i.title}</a>
+            <div class="meta">
+              <span class="source">${i.source}</span>
+              <span>${i.date}</span>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        el.className = 'error';
+        el.innerHTML = 'Nem sikerült betölteni. Ellenőrizd a publikálást.';
+        console.error(e);
+      }
+    }
+    load();
+  </script>
+</body>
+</html>
